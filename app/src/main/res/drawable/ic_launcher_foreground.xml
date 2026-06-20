@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Ambient yellow glow behind the play icon -->
+    <path
+        android:strokeColor="#40FFEB3B"
+        android:strokeWidth="12"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 46,38 A 4,4 0 0,1 50,38 L 70,52 A 4,4 0 0,1 70,58 L 50,72 A 4,4 0 0,1 42,68 L 42,42 A 4,4 0 0,1 46,38 Z" />
+
+    <!-- Sharp neon yellow play icon with rounded corners -->
+    <path
+        android:strokeColor="#FFFF00"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:fillColor="#FFEB3B"
+        android:pathData="M 46,38 A 4,4 0 0,1 50,38 L 70,52 A 4,4 0 0,1 70,58 L 50,72 A 4,4 0 0,1 42,68 L 42,42 A 4,4 0 0,1 46,38 Z" />
+
+    <!-- Pure white bright core highlight inside the play icon -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 46,38 A 4,4 0 0,1 50,38 L 70,52 A 4,4 0 0,1 70,58 L 50,72 A 4,4 0 0,1 42,68 L 42,42 A 4,4 0 0,1 46,38 Z" />
+
+</vector>

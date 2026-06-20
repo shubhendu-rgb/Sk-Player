@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notification_layout"
+    android:layout_width="match_parent"
+    android:layout_height="72dp">
+
+    <!-- Background blurred thumbnail -->
+    <ImageView
+        android:id="@+id/notification_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop" />
+
+    <!-- Container for Content -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp">
+
+        <!-- Inner branding logo -->
+        <ImageView
+            android:id="@+id/notification_small_icon"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:scaleType="centerCrop"
+            android:src="@mipmap/ic_launcher"
+            android:layout_marginEnd="12dp" />
+
+        <!-- Title & Info -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/notification_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Now Playing"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/notification_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sk Player"
+                android:textColor="#DDDDDD"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Media controls -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginStart="8dp">
+
+            <!-- Previous Button -->
+            <ImageButton
+                android:id="@+id/notification_prev"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_notification_control_m3"
+                android:src="@drawable/ic_skip_previous_m3"
+                android:tint="#FFFFFF"
+                android:contentDescription="Previous"
+                android:scaleType="centerInside" />
+
+            <!-- Play/Pause Button -->
+            <ImageButton
+                android:id="@+id/notification_play_pause"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_notification_play_pause_m3"
+                android:src="@drawable/ic_pause_m3"
+                android:tint="#21005D"
+                android:contentDescription="Play or Pause"
+                android:scaleType="centerInside"
+                android:layout_marginHorizontal="6dp" />
+
+            <!-- Next Button -->
+            <ImageButton
+                android:id="@+id/notification_next"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_notification_control_m3"
+                android:src="@drawable/ic_skip_next_m3"
+                android:tint="#FFFFFF"
+                android:contentDescription="Next"
+                android:scaleType="centerInside" />
+
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>

@@ -1,0 +1,6 @@
+{
+  "name": "Sk Player",
+  "description": "An immersive Jetpack Compose video player with speed controls, separate playlist categorizations, multi-language audio toggling, gesture seeks and WhatsApp status saver.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
