@@ -120,6 +120,12 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
     private val _isTransparentNav = MutableStateFlow(false)
     val isTransparentNav: StateFlow<Boolean> = _isTransparentNav.asStateFlow()
 
+    private val _holdToSpeedEnabled = MutableStateFlow(true)
+    val holdToSpeedEnabled: StateFlow<Boolean> = _holdToSpeedEnabled.asStateFlow()
+
+    private val _holdToSpeedValue = MutableStateFlow(2f)
+    val holdToSpeedValue: StateFlow<Float> = _holdToSpeedValue.asStateFlow()
+
     private val _customFontUri = MutableStateFlow<String?>(null)
     val customFontUri: StateFlow<String?> = _customFontUri.asStateFlow()
 
@@ -168,6 +174,8 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         _videoGridSize.value = prefs.getInt("video_grid_size", 2)
         _uiCornerRadius.value = prefs.getInt("ui_corner_radius", 12)
         _isTransparentNav.value = prefs.getBoolean("is_transparent_nav", false)
+        _holdToSpeedEnabled.value = prefs.getBoolean("hold_to_speed_enabled", true)
+        _holdToSpeedValue.value = prefs.getFloat("hold_to_speed_value", 2f)
         _customFontUri.value = prefs.getString("custom_font_uri", null)
         _isSubtitleEnabled.value = prefs.getBoolean("is_subtitle_enabled", true)
         _subtitleHasBackground.value = prefs.getBoolean("subtitle_has_bg", false)
@@ -288,6 +296,20 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         _isTransparentNav.value = isTransparent
         context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("is_transparent_nav", isTransparent)
+            .apply()
+    }
+
+    fun setHoldToSpeedEnabled(context: Context, isEnabled: Boolean) {
+        _holdToSpeedEnabled.value = isEnabled
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("hold_to_speed_enabled", isEnabled)
+            .apply()
+    }
+
+    fun setHoldToSpeedValue(context: Context, value: Float) {
+        _holdToSpeedValue.value = value
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putFloat("hold_to_speed_value", value)
             .apply()
     }
 

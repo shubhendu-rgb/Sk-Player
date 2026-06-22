@@ -257,6 +257,8 @@ fun MainContentScreen(viewModel: VideoViewModel) {
     val videoGridSize by viewModel.videoGridSize.collectAsStateWithLifecycle()
     val uiCornerRadius by viewModel.uiCornerRadius.collectAsStateWithLifecycle()
     val isTransparentNav by viewModel.isTransparentNav.collectAsStateWithLifecycle()
+    val holdToSpeedEnabled by viewModel.holdToSpeedEnabled.collectAsStateWithLifecycle()
+    val holdToSpeedValue by viewModel.holdToSpeedValue.collectAsStateWithLifecycle()
     val customFontUri by viewModel.customFontUri.collectAsStateWithLifecycle()
     val isSubtitleEnabled by viewModel.isSubtitleEnabled.collectAsStateWithLifecycle()
     val subtitleHasBackground by viewModel.subtitleHasBackground.collectAsStateWithLifecycle()
@@ -376,6 +378,10 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                     onUiCornerRadiusChange = { viewModel.setUiCornerRadius(context, it) },
                     isTransparentNav = isTransparentNav,
                     onIsTransparentNavChange = { viewModel.setIsTransparentNav(context, it) },
+                    holdToSpeedEnabled = holdToSpeedEnabled,
+                    onHoldToSpeedEnabledChange = { viewModel.setHoldToSpeedEnabled(context, it) },
+                    holdToSpeedValue = holdToSpeedValue,
+                    onHoldToSpeedValueChange = { viewModel.setHoldToSpeedValue(context, it) },
                     playerBackgroundOpacity = playerBackgroundOpacity,
                     onPlayerBackgroundOpacityChange = { viewModel.setPlayerBackgroundOpacity(context, it) },
                     navigationButtonOpacity = navigationButtonOpacity,
@@ -775,6 +781,8 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                 onVideoFilterChange = { viewModel.setVideoFilter(context, it) },
                                 initialVideoResizeMode = videoResizeMode,
                                 onVideoResizeModeChange = { viewModel.setVideoResizeMode(context, it) },
+                                holdToSpeedEnabled = holdToSpeedEnabled,
+                                holdToSpeedValue = holdToSpeedValue,
                                 uiCornerRadius = uiCornerRadius,
                                 hasSubtitleBackground = subtitleHasBackground,
                                 subtitleTextColor = subtitleTextColor,
@@ -875,6 +883,10 @@ fun SidebarCustomizationContent(
     onUiCornerRadiusChange: (Int) -> Unit,
     isTransparentNav: Boolean,
     onIsTransparentNavChange: (Boolean) -> Unit,
+    holdToSpeedEnabled: Boolean,
+    onHoldToSpeedEnabledChange: (Boolean) -> Unit,
+    holdToSpeedValue: Float,
+    onHoldToSpeedValueChange: (Float) -> Unit,
     playerBackgroundOpacity: Float,
     onPlayerBackgroundOpacityChange: (Float) -> Unit,
     navigationButtonOpacity: Float,
@@ -1373,6 +1385,37 @@ fun SidebarCustomizationContent(
                         onCheckedChange = { onIsTransparentNavChange(it) }
                     )
                 }
+
+                // Hold to Speed Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { onHoldToSpeedEnabledChange(!holdToSpeedEnabled) }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Hold to speed",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Switch(
+                        checked = holdToSpeedEnabled,
+                        onCheckedChange = { onHoldToSpeedEnabledChange(it) }
+                    )
+                }
+
+                if (holdToSpeedEnabled) {
+                    Text(
+                        text = "Touch-and-hold speed (${String.format("%.1fx", holdToSpeedValue)})",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Slider(
+                        value = holdToSpeedValue,
+                        onValueChange = { onHoldToSpeedValueChange(Math.round(it * 10) / 10f) },
+                        valueRange = 2f..8f,
+                        steps = 59 // Assuming 0.1 increments: (8.0 - 2.0) / 0.1 = 60 intervals -> 59 steps
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val fontPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -1751,6 +1794,12 @@ fun SidebarCustomizationContent(
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
+                        )
+
+                        Text(
+                            text = "Version 2.0",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFF00F0FF)
                         )
 
                         Text(

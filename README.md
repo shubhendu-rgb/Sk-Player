@@ -1,20 +1,21 @@
-# Sk Player 🎬
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-Sk Player is a modern, feature-rich video player application designed to provide a seamless media playback experience with all essential controls and advanced functionalities.
+# Run and deploy your AI Studio app
 
-## ✨ Features
+This contains everything you need to run your app locally.
 
-* **Core Playback:** Play, Pause, Stop, Seek Forward/Backward.
-* **Speed Control:** Adjust playback speed ($0.5x$, $1.0x$, $1.5x$, $2.0x$).
-* **Audio & Subtitles:** Multi-track audio selection and external subtitle support (`.srt`, `.vtt`).
-* **Volume & Brightness:** Intuitve gesture controls for volume and brightness adjustments.
-* **Picture-in-Picture (PiP):** Keep watching your videos while multitasking.
-* Filters : Use Prebuild Filters For Better View
-* **Playlist Management:** Queue files, skip next/previous, and shuffle support.
-* Status Saver : WhatsApp Status Saver .
-* Note : Give all pormitions and you need to restart the app for first time after install.
+View your app in AI Studio: https://ai.studio/apps/f2a11826-f33b-4ddf-b2a6-066d92e407e0
 
-## 🚀 Getting Started
+## Run Locally
 
-### Prerequisites
-Android
+**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+
+
+1. Open Android Studio
+2. Select **Open** and choose the directory containing this project
+3. Allow Android Studio to fix any incompatibilities as it imports the project.
+4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
+5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
+6. Run the app on an emulator or physical device

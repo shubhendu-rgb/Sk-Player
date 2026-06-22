@@ -100,6 +100,8 @@ fun VideoPlayer(
     initialVideoResizeMode: Int = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
     onVideoResizeModeChange: (Int) -> Unit = {},
     uiCornerRadius: Int = 12,
+    holdToSpeedEnabled: Boolean = true,
+    holdToSpeedValue: Float = 2f,
     hasSubtitleBackground: Boolean = false,
     subtitleTextColor: Int = android.graphics.Color.WHITE,
     hasSubtitleOutline: Boolean = true,
@@ -113,6 +115,7 @@ fun VideoPlayer(
     var areControlsVisible by remember { mutableStateOf(true) }
     var isLocked by remember { mutableStateOf(false) }
     var isPlayingState by remember { mutableStateOf(true) }
+    var isHoldToSpeedActive by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
     var totalDuration by remember { mutableStateOf(0L) }
     var isSeeking by remember { mutableStateOf(false) }
@@ -984,7 +987,7 @@ fun VideoPlayer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(isLocked) {
+                .pointerInput(isLocked, holdToSpeedEnabled, holdToSpeedValue, speed) {
                     if (isLocked) {
                         detectTapGestures(
                             onTap = {
@@ -994,6 +997,24 @@ fun VideoPlayer(
                         return@pointerInput
                     }
                     detectTapGestures(
+                        onPress = {
+                            if (holdToSpeedEnabled && isPlayingState) {
+                                val pressJob = coroutineScope.launch {
+                                    delay(400)
+                                    isHoldToSpeedActive = true
+                                    areControlsVisible = false
+                                    exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(holdToSpeedValue)
+                                }
+                                tryAwaitRelease()
+                                pressJob.cancel()
+                                if (isHoldToSpeedActive) {
+                                    isHoldToSpeedActive = false
+                                    exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(speed)
+                                }
+                            } else {
+                                tryAwaitRelease()
+                            }
+                        },
                         onTap = {
                             areControlsVisible = !areControlsVisible
                         },
@@ -1151,24 +1172,24 @@ fun VideoPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    val gestureType = activeGestureType ?: lastActiveGestureType
-                    val value = activeGestureValue
-                    val isVolume = gestureType == "VOLUME"
-                    val isSeek = gestureType == "SEEK"
-                    
-                    val icon = if (isSeek) {
-                        Icons.Default.FastForward
-                    } else if (isVolume) {
-                        if (value == 0f) Icons.Default.VolumeMute
-                        else if (value < 0.5f) Icons.Default.VolumeDown
-                        else Icons.Default.VolumeUp
-                    } else {
-                        if (value < 0.35f) Icons.Default.BrightnessLow
-                        else if (value < 0.7f) Icons.Default.BrightnessMedium
-                        else Icons.Default.BrightnessHigh
-                    }
-                    
-                    Icon(
+                        val gestureType = activeGestureType ?: lastActiveGestureType
+                        val value = activeGestureValue
+                        val isVolume = gestureType == "VOLUME"
+                        val isSeek = gestureType == "SEEK"
+                        
+                        val icon = if (isSeek) {
+                            Icons.Default.FastForward
+                        } else if (isVolume) {
+                            if (value == 0f) Icons.Default.VolumeMute
+                            else if (value < 0.5f) Icons.Default.VolumeDown
+                            else Icons.Default.VolumeUp
+                        } else {
+                            if (value < 0.35f) Icons.Default.BrightnessLow
+                            else if (value < 0.7f) Icons.Default.BrightnessMedium
+                            else Icons.Default.BrightnessHigh
+                        }
+                        
+                        Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (isVolume && value > 1f) Color.Red else MaterialTheme.colorScheme.primary,
@@ -1269,6 +1290,45 @@ fun VideoPlayer(
                         fontWeight = if (isVolume && value > 1f) FontWeight.Bold else FontWeight.Normal
                     )
                 }
+            }
+        }
+
+        // Hold to Speed Custom Overlay
+        AnimatedVisibility(
+            visible = isHoldToSpeedActive && !isInPipMode,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                val offsetAnim by infiniteTransition.animateFloat(
+                    initialValue = -5f,
+                    targetValue = 5f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(durationMillis = 300, easing = androidx.compose.animation.core.LinearEasing),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                    )
+                )
+
+                Icon(
+                    imageVector = Icons.Default.FastForward,
+                    contentDescription = "Hold to Speed",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .offset(x = offsetAnim.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${String.format("%.1f", holdToSpeedValue)}x Speed",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
