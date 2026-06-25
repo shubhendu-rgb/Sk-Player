@@ -14,8 +14,8 @@ android {
     applicationId = "com.skplayer.org"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "2.0"
+    versionCode = 7
+    versionName = "3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

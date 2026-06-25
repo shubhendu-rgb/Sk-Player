@@ -120,6 +120,9 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
     private val _isTransparentNav = MutableStateFlow(false)
     val isTransparentNav: StateFlow<Boolean> = _isTransparentNav.asStateFlow()
 
+    private val _isUiBlurEnabled = MutableStateFlow(true)
+    val isUiBlurEnabled: StateFlow<Boolean> = _isUiBlurEnabled.asStateFlow()
+
     private val _holdToSpeedEnabled = MutableStateFlow(true)
     val holdToSpeedEnabled: StateFlow<Boolean> = _holdToSpeedEnabled.asStateFlow()
 
@@ -174,6 +177,7 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         _videoGridSize.value = prefs.getInt("video_grid_size", 2)
         _uiCornerRadius.value = prefs.getInt("ui_corner_radius", 12)
         _isTransparentNav.value = prefs.getBoolean("is_transparent_nav", false)
+        _isUiBlurEnabled.value = prefs.getBoolean("is_ui_blur_enabled", true)
         _holdToSpeedEnabled.value = prefs.getBoolean("hold_to_speed_enabled", true)
         _holdToSpeedValue.value = prefs.getFloat("hold_to_speed_value", 2f)
         _customFontUri.value = prefs.getString("custom_font_uri", null)
@@ -296,6 +300,13 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         _isTransparentNav.value = isTransparent
         context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
             .putBoolean("is_transparent_nav", isTransparent)
+            .apply()
+    }
+
+    fun setIsUiBlurEnabled(context: Context, isEnabled: Boolean) {
+        _isUiBlurEnabled.value = isEnabled
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("is_ui_blur_enabled", isEnabled)
             .apply()
     }
 

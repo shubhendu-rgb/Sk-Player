@@ -42,6 +42,66 @@ private val PureLightColorScheme =
     outline = Color(0xFFCED4DA)
   )
 
+private val BasicLightColorScheme =
+  lightColorScheme(
+    primary = Color(0xFF000000),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF495057),
+    onSecondary = Color(0xFF000000),
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF000000),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFF1F3F4),
+    onSurfaceVariant = Color(0xFF000000),
+    outline = Color(0xFFE0E0E0)
+  )
+
+private val DawnGlowColorScheme =
+  lightColorScheme(
+    primary = Color(0xFFFF7043), // Deep Orange
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFFFFB74D), // Orange Light
+    onSecondary = Color(0xFF3E2723),
+    background = Color(0xFFFFF3E0), // Orange very light
+    onBackground = Color(0xFF3E2723),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF3E2723),
+    surfaceVariant = Color(0xFFFFE0B2),
+    onSurfaceVariant = Color(0xFF5D4037),
+    outline = Color(0xFFD7CCC8)
+  )
+
+private val OceanBreezeColorScheme =
+  lightColorScheme(
+    primary = Color(0xFF26A69A), // Teal
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF4DD0E1), // Cyan
+    onSecondary = Color(0xFF004D40),
+    background = Color(0xFFE0F2F1), // Teal very light
+    onBackground = Color(0xFF004D40),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF004D40),
+    surfaceVariant = Color(0xFFB2DFDB),
+    onSurfaceVariant = Color(0xFF00695C),
+    outline = Color(0xFF80CBC4)
+  )
+
+private val SpringMorningColorScheme =
+  lightColorScheme(
+    primary = Color(0xFF66BB6A), // Green Light
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFFFFCA28), // Amber Light
+    onSecondary = Color(0xFF1B5E20),
+    background = Color(0xFFF1F8E9), // Green very light
+    onBackground = Color(0xFF1B5E20),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF1B5E20),
+    surfaceVariant = Color(0xFFDCEDC8),
+    onSurfaceVariant = Color(0xFF33691E),
+    outline = Color(0xFFAED581)
+  )
+
 private val CosmicSlateColorScheme =
   darkColorScheme(
     primary = Color(0xFF88C0D0),
@@ -112,6 +172,17 @@ fun MyApplicationTheme(
   val colorScheme =
     when (themeMode) {
       "LIGHT" -> PureLightColorScheme
+      "BASIC_LIGHT" -> BasicLightColorScheme
+      "MY_THEME_LIGHT" -> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          dynamicLightColorScheme(context)
+        } else {
+          PureLightColorScheme
+        }
+      }
+      "DAWN_GLOW" -> DawnGlowColorScheme
+      "OCEAN_BREEZE" -> OceanBreezeColorScheme
+      "SPRING_MORNING" -> SpringMorningColorScheme
       "COSMIC" -> CosmicSlateColorScheme
       "AMBER" -> SunsetAmberColorScheme
       "FOREST" -> ForestGreenColorScheme

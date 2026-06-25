@@ -52,6 +52,7 @@ fun LocalVideosTab(
     onDeleteVideo: (VideoItem) -> Unit,
     videoGridSize: Int = 2,
     uiCornerRadius: Int = 12,
+    isUiBlurEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onMenuClick: (() -> Unit)? = null
 ) {
@@ -139,7 +140,7 @@ fun LocalVideosTab(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(if (isBlurred) 16.dp else 0.dp)
+                    .blur(if (isBlurred && isUiBlurEnabled) 16.dp else 0.dp)
             ) {
                 Row(
                     modifier = Modifier

@@ -250,11 +250,16 @@ fun VideoPlayer(
     
     val activity = context as? android.app.Activity
     val originalOrientation = remember { activity?.requestedOrientation ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
-    var isAutoRotateEnabled by remember { mutableStateOf(true) }
+    var isAutoRotateEnabled by remember { mutableStateOf(false) }
+    var videoOrientation by remember { mutableIntStateOf(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(isAutoRotateEnabled, videoOrientation) {
         if (isAutoRotateEnabled) {
             activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        } else {
+            if (videoOrientation != android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+                activity?.requestedOrientation = videoOrientation
+            }
         }
         onDispose {
             activity?.requestedOrientation = originalOrientation
@@ -667,6 +672,17 @@ fun VideoPlayer(
 
     val playerListener = remember {
         object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val isLandscape = videoSize.width > videoSize.height
+                    videoOrientation = if (isLandscape) {
+                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    } else {
+                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    }
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isPlayingState = exoPlayer.isPlaying
                 totalDuration = exoPlayer.duration.coerceAtLeast(0L)
@@ -1903,11 +1919,9 @@ fun VideoPlayer(
                                     )
                                     .clickable {
                                         if (isAutoRotateEnabled) {
-                                            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                                             isAutoRotateEnabled = false
-                                            android.widget.Toast.makeText(context, "Rotation locked in current state", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, "Rotation locked to video orientation", android.widget.Toast.LENGTH_SHORT).show()
                                         } else {
-                                            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
                                             isAutoRotateEnabled = true
                                             android.widget.Toast.makeText(context, "Full sensor auto-rotation enabled", android.widget.Toast.LENGTH_SHORT).show()
                                         }
@@ -2427,7 +2441,7 @@ fun SnakeSeekBar(
         initialValue = 0f,
         targetValue = 2f * Math.PI.toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            animation = tween(durationMillis = 1500, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "SnakePhase"
@@ -2437,6 +2451,17 @@ fun SnakeSeekBar(
         modifier = modifier
             .height(24.dp)
             .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { offset ->
+                        if (width > 0) {
+                            val newValue = (offset.x / width).coerceIn(0f, 1f)
+                            onValueChange(newValue)
+                            onValueChangeFinished?.invoke()
+                        }
+                    }
+                )
+            }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
@@ -2481,24 +2506,27 @@ fun SnakeSeekBar(
         // Draw Active Track (Snake if playing, otherwise straight)
         if (isPlaying && !isDragging) {
             val path = Path()
-            path.moveTo(0f, centerY)
             val amplitude = 4.dp.toPx()
             val frequency = 40.dp.toPx()
             
             for (x in 0..thumbX.toInt() step 2) {
                 val dx = x.toFloat()
-                val dy = centerY + Math.sin(((dx / frequency) * 2 * Math.PI + phase)).toFloat() * amplitude
-                path.lineTo(dx, dy)
+                val dy = centerY + Math.sin(((dx / frequency) * 2 * Math.PI - phase)).toFloat() * amplitude
+                if (x == 0) {
+                    path.moveTo(dx, dy)
+                } else {
+                    path.lineTo(dx, dy)
+                }
             }
             if (thumbX > 0) {
-                val endDy = centerY + Math.sin(((thumbX / frequency) * 2 * Math.PI + phase)).toFloat() * amplitude
+                val endDy = centerY + Math.sin(((thumbX / frequency) * 2 * Math.PI - phase)).toFloat() * amplitude
                 path.lineTo(thumbX, endDy)
             }
 
             drawPath(
                 path = path,
                 color = activeColor,
-                style = Stroke(width = 4.dp.toPx(), join = StrokeJoin.Round)
+                style = Stroke(width = 4.dp.toPx(), join = StrokeJoin.Round, cap = StrokeCap.Round)
             )
         } else {
             drawLine(

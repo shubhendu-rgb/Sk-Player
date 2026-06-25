@@ -111,7 +111,7 @@ class VideoRepository(private val dao: PlaylistItemDao) {
                     if (size <= 0) continue
                     val lastModified = file.lastModified()
                     
-                    val hash = path.substringAfterLast('/').hashCode().coerceAtLeast(0)
+                    val hash = path.hashCode() and 0x7FFFFFFF
                     val id = "local_scanned_$hash"
                     if (prefs.getBoolean("deleted_$id", false)) continue
                     

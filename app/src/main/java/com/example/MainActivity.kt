@@ -49,7 +49,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
@@ -257,6 +261,7 @@ fun MainContentScreen(viewModel: VideoViewModel) {
     val videoGridSize by viewModel.videoGridSize.collectAsStateWithLifecycle()
     val uiCornerRadius by viewModel.uiCornerRadius.collectAsStateWithLifecycle()
     val isTransparentNav by viewModel.isTransparentNav.collectAsStateWithLifecycle()
+    val isUiBlurEnabled by viewModel.isUiBlurEnabled.collectAsStateWithLifecycle()
     val holdToSpeedEnabled by viewModel.holdToSpeedEnabled.collectAsStateWithLifecycle()
     val holdToSpeedValue by viewModel.holdToSpeedValue.collectAsStateWithLifecycle()
     val customFontUri by viewModel.customFontUri.collectAsStateWithLifecycle()
@@ -378,6 +383,8 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                     onUiCornerRadiusChange = { viewModel.setUiCornerRadius(context, it) },
                     isTransparentNav = isTransparentNav,
                     onIsTransparentNavChange = { viewModel.setIsTransparentNav(context, it) },
+                    isUiBlurEnabled = isUiBlurEnabled,
+                    onIsUiBlurEnabledChange = { viewModel.setIsUiBlurEnabled(context, it) },
                     holdToSpeedEnabled = holdToSpeedEnabled,
                     onHoldToSpeedEnabledChange = { viewModel.setHoldToSpeedEnabled(context, it) },
                     holdToSpeedValue = holdToSpeedValue,
@@ -408,7 +415,7 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .then(
-                        if (isDrawerOpen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        if (isDrawerOpen && isUiBlurEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             Modifier.blur(16.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
                         } else {
                             Modifier
@@ -433,12 +440,12 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                 }
 
                 Scaffold(
-                    modifier = Modifier.fillMaxSize().haze(state = hazeState),
+                    modifier = Modifier.fillMaxSize().then(if (isUiBlurEnabled) Modifier.haze(state = hazeState) else Modifier),
                     containerColor = Color.Transparent,
                      bottomBar = {
                         // Persistent custom bottom navigation bar
                         val containerBg = if (isTransparentNav) MaterialTheme.colorScheme.surface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primaryContainer
-                        val hazeModifier = if (isTransparentNav) Modifier.hazeChild(state = hazeState, style = dev.chrisbanes.haze.HazeStyle(blurRadius = 24.dp, backgroundColor = Color.Transparent, tint = null as dev.chrisbanes.haze.HazeTint?)) else Modifier
+                        val hazeModifier = if (isTransparentNav && isUiBlurEnabled) Modifier.hazeChild(state = hazeState, style = dev.chrisbanes.haze.HazeStyle(blurRadius = 24.dp, backgroundColor = Color.Transparent, tint = null as dev.chrisbanes.haze.HazeTint?)) else Modifier
                         val borderColor = MaterialTheme.colorScheme.primary
 
                         Box(
@@ -654,6 +661,7 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                             onDeleteVideo = { video -> viewModel.deleteLocalVideo(context, video) },
                                             videoGridSize = videoGridSize,
                                             uiCornerRadius = uiCornerRadius,
+                                            isUiBlurEnabled = isUiBlurEnabled,
                                             onMenuClick = { scope.launch { drawerState.open() } }
                                         )
                                     }
@@ -692,6 +700,7 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                             onDeleteVideo = { video -> viewModel.deleteLocalVideo(context, video) },
                                             folderVideosSortOption = folderVideosSortOption,
                                             onFolderVideosSortOptionChange = { viewModel.setFolderVideosSortOption(context, it) },
+                                            isUiBlurEnabled = isUiBlurEnabled,
                                             onMenuClick = { scope.launch { drawerState.open() } }
                                         )
                                     }
@@ -867,6 +876,7 @@ fun SettingsCategoryHeader(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun SidebarCustomizationContent(
     themeMode: String,
@@ -883,6 +893,8 @@ fun SidebarCustomizationContent(
     onUiCornerRadiusChange: (Int) -> Unit,
     isTransparentNav: Boolean,
     onIsTransparentNavChange: (Boolean) -> Unit,
+    isUiBlurEnabled: Boolean,
+    onIsUiBlurEnabledChange: (Boolean) -> Unit,
     holdToSpeedEnabled: Boolean,
     onHoldToSpeedEnabledChange: (Boolean) -> Unit,
     holdToSpeedValue: Float,
@@ -917,9 +929,14 @@ fun SidebarCustomizationContent(
     }
 
     val themeLabels = mapOf(
-        "MY_THEME" to "My Theme",
+        "MY_THEME" to "Material You",
         "DARK" to "Dark Accent",
         "LIGHT" to "Pure Light",
+        "BASIC_LIGHT" to "Basic Light",
+        "MY_THEME_LIGHT" to "Material You",
+        "DAWN_GLOW" to "Dawn Glow",
+        "OCEAN_BREEZE" to "Ocean Breeze",
+        "SPRING_MORNING" to "Spring Morning",
         "COSMIC" to "Cosmic Slate",
         "AMBER" to "Sunset Amber",
         "FOREST" to "Forest Green",
@@ -948,10 +965,14 @@ fun SidebarCustomizationContent(
         "SOLAR_BURST" to "Solar Burst"
     )
 
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+    val categoryPositions = remember { mutableMapOf<String, Float>() }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.40f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = playerBackgroundOpacity))
             .statusBarsPadding()
             .navigationBarsPadding()
             .padding(16.dp)
@@ -961,7 +982,7 @@ fun SidebarCustomizationContent(
             ) {
                 expandedCategory = null
             }
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         // Drawer Header
         Row(
@@ -1006,6 +1027,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["SUBTITLE"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1014,7 +1038,14 @@ fun SidebarCustomizationContent(
                 subtitle = "Appearance & Style",
                 isExpanded = isSubtitleExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isSubtitleExpanded) null else "SUBTITLE"
+                    val isOpening = !isSubtitleExpanded
+                    expandedCategory = if (isOpening) "SUBTITLE" else null
+                    if (isOpening) {
+                        coroutineScope.launch {
+                            kotlinx.coroutines.delay(50)
+                            categoryPositions["SUBTITLE"]?.let { y -> scrollState.animateScrollTo(y.toInt()) }
+                        }
+                    }
                 }
             )
 
@@ -1142,6 +1173,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["THEME"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1150,17 +1184,49 @@ fun SidebarCustomizationContent(
                 subtitle = themeLabels[themeMode] ?: "Dark Accent",
                 isExpanded = isThemeExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isThemeExpanded) null else "THEME"
+                    val isOpening = !isThemeExpanded
+                    expandedCategory = if (isOpening) "THEME" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["THEME"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
             if (isThemeExpanded) {
                 Spacer(modifier = Modifier.height(12.dp))
+                Text("Light Themes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ThemeChip("MY_THEME", "My Theme", themeMode, onThemeChange, Modifier.weight(1f))
+                    ThemeChip("MY_THEME_LIGHT", "Material You", themeMode, onThemeChange, Modifier.weight(1f))
+                    ThemeChip("LIGHT", "Pure Light", themeMode, onThemeChange, Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeChip("BASIC_LIGHT", "Basic Light", themeMode, onThemeChange, Modifier.weight(1f))
+                    ThemeChip("DAWN_GLOW", "Dawn Glow", themeMode, onThemeChange, Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeChip("OCEAN_BREEZE", "Ocean Breeze", themeMode, onThemeChange, Modifier.weight(1f))
+                    ThemeChip("SPRING_MORNING", "Spring Morning", themeMode, onThemeChange, Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Dark Themes", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeChip("MY_THEME", "Material You", themeMode, onThemeChange, Modifier.weight(1f))
                     ThemeChip("DARK", "Dark Accent", themeMode, onThemeChange, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1168,24 +1234,16 @@ fun SidebarCustomizationContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ThemeChip("LIGHT", "Pure Light", themeMode, onThemeChange, Modifier.weight(1f))
                     ThemeChip("COSMIC", "Cosmic Slate", themeMode, onThemeChange, Modifier.weight(1f))
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     ThemeChip("AMBER", "Sunset Amber", themeMode, onThemeChange, Modifier.weight(1f))
-                    ThemeChip("FOREST", "Forest Green", themeMode, onThemeChange, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    ThemeChip("FOREST", "Forest Green", themeMode, onThemeChange, Modifier.weight(1f))
                     ThemeChip("PURPLE", "Deep Purple", themeMode, onThemeChange, Modifier.weight(1f))
-                    Spacer(modifier = Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -1201,6 +1259,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["SORT"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1209,7 +1270,9 @@ fun SidebarCustomizationContent(
                 subtitle = sortLabels[sortOption] ?: "Title (A to Z)",
                 isExpanded = isSortExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isSortExpanded) null else "SORT"
+                    val isOpening = !isSortExpanded
+                    expandedCategory = if (isOpening) "SORT" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["SORT"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
@@ -1261,6 +1324,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["PLAYER"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1269,7 +1335,9 @@ fun SidebarCustomizationContent(
                 subtitle = designLabels[playerDesign] ?: "Midnight",
                 isExpanded = isPlayerExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isPlayerExpanded) null else "PLAYER"
+                    val isOpening = !isPlayerExpanded
+                    expandedCategory = if (isOpening) "PLAYER" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["PLAYER"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
@@ -1306,6 +1374,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["UI_CUSTOM"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1314,14 +1385,18 @@ fun SidebarCustomizationContent(
                 subtitle = "Sliders & Buttons Opts",
                 isExpanded = isUiCustomExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isUiCustomExpanded) null else "UI_CUSTOM"
+                    val isOpening = !isUiCustomExpanded
+                    expandedCategory = if (isOpening) "UI_CUSTOM" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["UI_CUSTOM"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
             if (isUiCustomExpanded) {
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // Player background transparency option with slider / progress bar
+                // === PROGRESS BARS (SLIDERS) ===
+
+                // Player background transparency
                 Text(
                     text = "Player Background Opacity (${(playerBackgroundOpacity * 100).toInt()}%)",
                     style = MaterialTheme.typography.labelLarge,
@@ -1334,7 +1409,6 @@ fun SidebarCustomizationContent(
                     valueRange = 0f..1f,
                     modifier = Modifier.fillMaxWidth()
                 )
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Control player navigation button's background transparency
@@ -1352,22 +1426,54 @@ fun SidebarCustomizationContent(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Seek Bar Customization Design Option
+                // Change shape (corner radius)
                 Text(
-                    text = "Player Seek Bar Design",
+                    text = "UI Corner Radius (${uiCornerRadius}dp)",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DesignChip("CLASSIC", "Classic Slider", seekBarDesign, onSeekBarDesignChange, Modifier.weight(1f))
-                    DesignChip("SNAKE", "Snake Style", seekBarDesign, onSeekBarDesignChange, Modifier.weight(1f))
-                }
+                Slider(
+                    value = uiCornerRadius.toFloat(),
+                    onValueChange = { onUiCornerRadiusChange(it.toInt()) },
+                    valueRange = 0f..32f,
+                    steps = 32,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Videos in list (grid size)
+                Text(
+                    text = "Videos in List (Grid Size: ${videoGridSize})",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Slider(
+                    value = videoGridSize.toFloat(),
+                    onValueChange = { onVideoGridSizeChange(it.toInt()) },
+                    valueRange = 1f..3f,
+                    steps = 1,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (holdToSpeedEnabled) {
+                    Text(
+                        text = "Touch-and-hold speed (${String.format("%.1fx", holdToSpeedValue)})",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Slider(
+                        value = holdToSpeedValue,
+                        onValueChange = { onHoldToSpeedValueChange(Math.round(it * 10) / 10f) },
+                        valueRange = 2f..8f,
+                        steps = 59 // Assuming 0.1 increments: (8.0 - 2.0) / 0.1 = 60 intervals -> 59 steps
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // === TOGGLES ===
 
                 // Transparent Nav Toggle
                 Row(
@@ -1383,6 +1489,23 @@ fun SidebarCustomizationContent(
                     Switch(
                         checked = isTransparentNav,
                         onCheckedChange = { onIsTransparentNavChange(it) }
+                    )
+                }
+
+                // Blur Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { onIsUiBlurEnabledChange(!isUiBlurEnabled) }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Blur",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Switch(
+                        checked = isUiBlurEnabled,
+                        onCheckedChange = { onIsUiBlurEnabledChange(it) }
                     )
                 }
 
@@ -1402,19 +1525,24 @@ fun SidebarCustomizationContent(
                         onCheckedChange = { onHoldToSpeedEnabledChange(it) }
                     )
                 }
+                Spacer(modifier = Modifier.height(16.dp))
 
-                if (holdToSpeedEnabled) {
-                    Text(
-                        text = "Touch-and-hold speed (${String.format("%.1fx", holdToSpeedValue)})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Slider(
-                        value = holdToSpeedValue,
-                        onValueChange = { onHoldToSpeedValueChange(Math.round(it * 10) / 10f) },
-                        valueRange = 2f..8f,
-                        steps = 59 // Assuming 0.1 increments: (8.0 - 2.0) / 0.1 = 60 intervals -> 59 steps
-                    )
+                // === OTHERS ===
+
+                // Seek Bar Customization Design Option
+                Text(
+                    text = "Player Seek Bar Design",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DesignChip("CLASSIC", "Classic Slider", seekBarDesign, onSeekBarDesignChange, Modifier.weight(1f))
+                    DesignChip("SNAKE", "Snake Style", seekBarDesign, onSeekBarDesignChange, Modifier.weight(1f))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -1470,39 +1598,6 @@ fun SidebarCustomizationContent(
                         Text("Select TTF/OTF")
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Change shape (corner radius)
-                Text(
-                    text = "UI Corner Radius (${uiCornerRadius}dp)",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = uiCornerRadius.toFloat(),
-                    onValueChange = { onUiCornerRadiusChange(it.toInt()) },
-                    valueRange = 0f..32f,
-                    steps = 32,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Videos in list (grid size)
-                Text(
-                    text = "Videos in List (Grid Size: ${videoGridSize})",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = videoGridSize.toFloat(),
-                    onValueChange = { onVideoGridSizeChange(it.toInt()) },
-                    valueRange = 1f..3f,
-                    steps = 1,
-                    modifier = Modifier.fillMaxWidth()
-                )
                 Spacer(modifier = Modifier.height(12.dp))
             }
         }
@@ -1517,6 +1612,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["CUSTOM_BG"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1525,7 +1623,9 @@ fun SidebarCustomizationContent(
                 subtitle = if (customBgUri != null) "Uploaded custom photo" else "System theme wallpaper",
                 isExpanded = isBgExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isBgExpanded) null else "CUSTOM_BG"
+                    val isOpening = !isBgExpanded
+                    expandedCategory = if (isOpening) "CUSTOM_BG" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["CUSTOM_BG"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
@@ -1617,6 +1717,9 @@ fun SidebarCustomizationContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["CLEAR_STORAGE"] = coordinates.positionInParent().y
+                }
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
@@ -1625,7 +1728,9 @@ fun SidebarCustomizationContent(
                 subtitle = "Manage cached thumbnails and player history",
                 isExpanded = isStorageExpanded,
                 onHeaderClick = {
-                    expandedCategory = if (isStorageExpanded) null else "CLEAR_STORAGE"
+                    val isOpening = !isStorageExpanded
+                    expandedCategory = if (isOpening) "CLEAR_STORAGE" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["CLEAR_STORAGE"]?.let { scrollState.animateScrollTo(it.toInt()) } }
                 }
             )
 
@@ -1797,7 +1902,7 @@ fun SidebarCustomizationContent(
                         )
 
                         Text(
-                            text = "Version 2.0",
+                            text = "Version 3.0",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color(0xFF00F0FF)
                         )

@@ -48,6 +48,7 @@ fun FoldersTab(
     onDeleteVideo: (VideoItem) -> Unit,
     folderVideosSortOption: String,
     onFolderVideosSortOptionChange: (String) -> Unit,
+    isUiBlurEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onMenuClick: (() -> Unit)? = null
 ) {
@@ -168,7 +169,7 @@ fun FoldersTab(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .blur(if (isBlurred) 16.dp else 0.dp)
+                    .blur(if (isBlurred && isUiBlurEnabled) 16.dp else 0.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -290,7 +291,7 @@ fun FoldersTab(
 
                 val uniqueFolderVideos = remember(selectedFolder.videos, folderVideosSortOption) {
                     val seen = mutableSetOf<String>()
-                    val unique = selectedFolder.videos.filter { it.id.isNotEmpty() && seen.add(it.id) }
+                    val unique = selectedFolder.videos.filter { it.uri.isNotEmpty() && seen.add(it.uri) }
                     when (folderVideosSortOption) {
                         "Date" -> unique.sortedByDescending { it.dateAdded }
                         "Title" -> unique.sortedBy { it.title.lowercase() }
