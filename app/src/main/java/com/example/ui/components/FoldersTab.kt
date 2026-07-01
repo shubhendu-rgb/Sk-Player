@@ -46,6 +46,8 @@ fun FoldersTab(
     onCreatePlaylist: (String) -> Unit,
     onVideoPlay: (VideoItem, String?) -> Unit,
     onDeleteVideo: (VideoItem) -> Unit,
+    onRenameVideo: (VideoItem, String) -> Unit,
+    onHideVideo: (VideoItem) -> Unit,
     folderVideosSortOption: String,
     onFolderVideosSortOptionChange: (String) -> Unit,
     isUiBlurEnabled: Boolean = true,
@@ -299,13 +301,17 @@ fun FoldersTab(
                         else -> unique
                     }
                 }
+                val selectedVideoIds = remember(selectedVideos.size) {
+                    selectedVideos.map { it.id }.toSet()
+                }
+
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 100.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     items(uniqueFolderVideos, key = { it.id }) { video ->
-                        val isSelected = selectedVideos.any { it.id == video.id }
+                        val isSelected = selectedVideoIds.contains(video.id)
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -355,14 +361,8 @@ fun FoldersTab(
                                         .background(MaterialTheme.colorScheme.secondaryContainer),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    var cachedThumbnailPath by remember(video.id, video.uri) { mutableStateOf<String?>(null) }
-                                    var thumbnailLoaded by remember(video.id, video.uri) { mutableStateOf(false) }
-                                    LaunchedEffect(video.id, video.uri) {
-                                        cachedThumbnailPath = com.example.ThumbnailCacheManager.getOrCreateThumbnail(context, video.id, video.uri)
-                                        thumbnailLoaded = true
-                                    }
-                                    val finalThumb = if (thumbnailLoaded) (cachedThumbnailPath ?: video.thumbnailUri) else null
-                                    if (finalThumb != null) {
+                                    val finalThumb = video.thumbnailUri ?: video.uri
+                                    if (finalThumb.isNotEmpty()) {
                                         AsyncImage(
                                             model = finalThumb,
                                             contentDescription = video.title,
@@ -598,14 +598,8 @@ fun FoldersTab(
                                                 .background(MaterialTheme.colorScheme.secondaryContainer),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            var cachedThumbnailPath by remember(video.id, video.uri) { mutableStateOf<String?>(null) }
-                                            var thumbnailLoaded by remember(video.id, video.uri) { mutableStateOf(false) }
-                                            LaunchedEffect(video.id, video.uri) {
-                                                cachedThumbnailPath = com.example.ThumbnailCacheManager.getOrCreateThumbnail(context, video.id, video.uri)
-                                                thumbnailLoaded = true
-                                            }
-                                            val finalThumb = if (thumbnailLoaded) (cachedThumbnailPath ?: video.thumbnailUri) else null
-                                            if (finalThumb != null) {
+                                            val finalThumb = video.thumbnailUri ?: video.uri
+                                            if (finalThumb.isNotEmpty()) {
                                                 AsyncImage(
                                                     model = finalThumb,
                                                     contentDescription = video.title,
@@ -981,6 +975,26 @@ fun FoldersTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             modifier = Modifier.padding(bottom = 20.dp)
                         )
+
+                        // Hide Option
+                        Button(
+                            onClick = {
+                                showSelectionMenu = false
+                                selectedVideos.forEach { video ->
+                                    onHideVideo(video)
+                                }
+                                selectedVideos.clear()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Hide Selection", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // 1. Delete Option
                         Button(

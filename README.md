@@ -1,12 +1,21 @@
-Hello
-This is a video player with all needed featurs.
-1.video controlls
-2.video filters
-3.WhatsApp status saver
-4.audio extractor
-5.subtitle control
-etc
-<img width="720" height="1600" alt="Screenshot_2026-06-20-23-01-06-65_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/3aea4758-5f28-47af-9678-93446bcc67f9" />
-<img width="720" height="1600" alt="Screenshot_2026-06-20-23-00-59-12_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/f94375db-b475-4b62-9f76-19c86cb40979" />
-<img width="720" height="1600" alt="Screenshot_2026-06-20-23-00-33-20_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/3d88c900-b0f2-42d3-91f7-7a2913fa6b65" />
-<img width="720" height="1600" alt="Screenshot_2026-06-20-23-01-17-60_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/1cd65002-08fa-4c77-88db-93ecbc91620b" />
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
+
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/f2a11826-f33b-4ddf-b2a6-066d92e407e0
+
+## Run Locally
+
+**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+
+
+1. Open Android Studio
+2. Select **Open** and choose the directory containing this project
+3. Allow Android Studio to fix any incompatibilities as it imports the project.
+4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
+5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
+6. Run the app on an emulator or physical device

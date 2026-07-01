@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 sealed interface TabOption {
@@ -163,6 +164,9 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
     private val _recentlyPlayed = MutableStateFlow<List<RecentlyPlayedItem>>(emptyList())
     val recentlyPlayed: StateFlow<List<RecentlyPlayedItem>> = _recentlyPlayed.asStateFlow()
 
+    private val _hiddenVideoIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenVideoIds: StateFlow<Set<String>> = _hiddenVideoIds.asStateFlow()
+
     fun loadPreferences(context: Context) {
         val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)
         _themeMode.value = prefs.getString("theme_mode", "MY_THEME") ?: "MY_THEME"
@@ -186,7 +190,48 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         _subtitleTextColor.value = prefs.getInt("subtitle_text_color", android.graphics.Color.WHITE)
         _subtitleHasOutline.value = prefs.getBoolean("subtitle_has_outline", true)
         _folderVideosSortOption.value = prefs.getString("folder_videos_sort", "Date") ?: "Date"
+        _autoPlayNext.value = prefs.getBoolean("auto_play_next", true)
+        _appLockCode.value = prefs.getString("app_lock_code", "") ?: ""
+        _appLockSecretWord.value = prefs.getString("app_lock_secret_word", "") ?: ""
+        _wrongPasswordCount.value = prefs.getInt("wrong_password_count", 0)
+        _useFingerprint.value = prefs.getBoolean("use_fingerprint", false)
+        _hiddenVideoIds.value = prefs.getStringSet("hidden_video_ids", emptySet()) ?: emptySet()
         loadRecentlyPlayed(context)
+    }
+
+    fun setAppLockCode(context: Context, code: String) {
+        _appLockCode.value = code
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putString("app_lock_code", code)
+            .apply()
+    }
+
+    fun setAppLockSecretWord(context: Context, word: String) {
+        _appLockSecretWord.value = word
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putString("app_lock_secret_word", word)
+            .apply()
+    }
+
+    fun incrementWrongPasswordCount(context: Context) {
+        _wrongPasswordCount.value += 1
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putInt("wrong_password_count", _wrongPasswordCount.value)
+            .apply()
+    }
+
+    fun resetWrongPasswordCount(context: Context) {
+        _wrongPasswordCount.value = 0
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putInt("wrong_password_count", 0)
+            .apply()
+    }
+
+    fun setUseFingerprint(context: Context, use: Boolean) {
+        _useFingerprint.value = use
+        context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("use_fingerprint", use)
+            .apply()
     }
 
     fun setCustomBgUri(context: Context, uri: String?) {
@@ -461,14 +506,39 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         }
     }
 
+    private val _allLocalVideos = MutableStateFlow<List<VideoItem>>(emptyList())
+
+    private val _hiddenVideos = MutableStateFlow<List<VideoItem>>(emptyList())
+    val hiddenVideos: StateFlow<List<VideoItem>> = _hiddenVideos.asStateFlow()
+
+    fun loadHiddenVideos(context: Context) {
+        viewModelScope.launch {
+            val hiddenList = repository.getHiddenVideos(context, _hiddenVideoIds.value)
+            _hiddenVideos.value = hiddenList
+            val newHiddenIds = hiddenList.map { it.id }.toSet()
+            if (_hiddenVideoIds.value != newHiddenIds) {
+                _hiddenVideoIds.value = newHiddenIds
+                context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+                    .putStringSet("hidden_video_ids", newHiddenIds)
+                    .apply()
+                // Update local videos to filter out the newly discovered hidden videos
+                _localVideos.value = _allLocalVideos.value.filter { it.id !in newHiddenIds }
+                sortLocalVideos()
+            }
+        }
+    }
+
     fun scanDeviceVideos(context: Context) {
         viewModelScope.launch {
             _isScanningLocal.value = true
             _localVideos.value = emptyList() // Removes all loaded videos immediately
             val results = repository.scanLocalVideos(context)
-            _localVideos.value = results
+            _allLocalVideos.value = results
+            val hiddenIds = _hiddenVideoIds.value
+            _localVideos.value = results.filter { it.id !in hiddenIds }
             sortLocalVideos()
             _isScanningLocal.value = false
+            loadHiddenVideos(context)
         }
     }
 
@@ -569,6 +639,51 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
         }
     }
 
+    private val _showHideDemo = MutableStateFlow(false)
+    val showHideDemo: StateFlow<Boolean> = _showHideDemo.asStateFlow()
+
+    fun setVideoHidden(context: Context, video: VideoItem, isHidden: Boolean) {
+        viewModelScope.launch {
+            if (isHidden) {
+                val success = repository.hideLocalVideo(context, video)
+                if (success) {
+                    val currentSet = _hiddenVideoIds.value.toMutableSet()
+                    currentSet.add(video.id)
+                    _hiddenVideoIds.value = currentSet
+                    val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putStringSet("hidden_video_ids", currentSet)
+                        .apply()
+                        
+                    if (!prefs.getBoolean("has_shown_hide_demo", false)) {
+                        prefs.edit().putBoolean("has_shown_hide_demo", true).apply()
+                        _showHideDemo.value = true
+                    }
+                    scanDeviceVideos(context)
+                } else {
+                    android.widget.Toast.makeText(context, "Failed to hide video", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                val success = repository.unhideLocalVideo(context, video)
+                if (success) {
+                    val currentSet = _hiddenVideoIds.value.toMutableSet()
+                    currentSet.remove(video.id)
+                    _hiddenVideoIds.value = currentSet
+                    context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE).edit()
+                        .putStringSet("hidden_video_ids", currentSet)
+                        .apply()
+                    scanDeviceVideos(context)
+                } else {
+                    android.widget.Toast.makeText(context, "Failed to unhide video", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun dismissHideDemo() {
+        _showHideDemo.value = false
+    }
+
     fun deleteLocalVideo(context: Context, video: VideoItem) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && 
             !android.os.Environment.isExternalStorageManager()) {
@@ -654,6 +769,18 @@ class VideoViewModel(private val repository: VideoRepository) : ViewModel() {
     }
 
     // Auto Play Next Video switch state
+    private val _appLockCode = MutableStateFlow("")
+    val appLockCode: StateFlow<String> = _appLockCode.asStateFlow()
+
+    private val _appLockSecretWord = MutableStateFlow("")
+    val appLockSecretWord: StateFlow<String> = _appLockSecretWord.asStateFlow()
+
+    private val _wrongPasswordCount = MutableStateFlow(0)
+    val wrongPasswordCount: StateFlow<Int> = _wrongPasswordCount.asStateFlow()
+
+    private val _useFingerprint = MutableStateFlow(false)
+    val useFingerprint: StateFlow<Boolean> = _useFingerprint.asStateFlow()
+
     private val _autoPlayNext = MutableStateFlow(true)
     val autoPlayNext: StateFlow<Boolean> = _autoPlayNext.asStateFlow()
 

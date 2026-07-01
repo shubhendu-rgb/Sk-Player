@@ -115,6 +115,7 @@ fun VideoPlayer(
     var areControlsVisible by remember { mutableStateOf(true) }
     var isLocked by remember { mutableStateOf(false) }
     var isPlayingState by remember { mutableStateOf(true) }
+    var hasEnded by remember { mutableStateOf(false) }
     var isHoldToSpeedActive by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
     var totalDuration by remember { mutableStateOf(0L) }
@@ -686,6 +687,7 @@ fun VideoPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isPlayingState = exoPlayer.isPlaying
                 totalDuration = exoPlayer.duration.coerceAtLeast(0L)
+                hasEnded = (playbackState == Player.STATE_ENDED)
                 if (playbackState == Player.STATE_ENDED) {
                     if (currentIsAutoPlayEnabled) {
                         currentOnPlayNext?.invoke()
@@ -740,9 +742,13 @@ fun VideoPlayer(
         }
     }
 
-    // Keep screen on while video player is active (prevents auto screen off)
-    DisposableEffect(activity) {
-        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    // Keep screen on while video is playing (prevents auto screen off)
+    DisposableEffect(activity, isPlayingState) {
+        if (isPlayingState) {
+            activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         onDispose {
             activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
@@ -1059,7 +1065,10 @@ fun VideoPlayer(
                                     activeSeekFeedback = null
                                 }
                             } else {
-                                if (exoPlayer.isPlaying) {
+                                if (hasEnded) {
+                                    exoPlayer.seekTo(0)
+                                    exoPlayer.play()
+                                } else if (exoPlayer.isPlaying) {
                                     exoPlayer.pause()
                                 } else {
                                     exoPlayer.play()
@@ -1675,7 +1684,10 @@ fun VideoPlayer(
                     // Main Play Toggle
                     IconButton(
                         onClick = {
-                            if (exoPlayer.isPlaying) {
+                            if (hasEnded) {
+                                exoPlayer.seekTo(0)
+                                exoPlayer.play()
+                            } else if (exoPlayer.isPlaying) {
                                 exoPlayer.pause()
                             } else {
                                 exoPlayer.play()
@@ -1695,8 +1707,8 @@ fun VideoPlayer(
                             }
                     ) {
                         Icon(
-                            imageVector = if (isPlayingState) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "Play or Pause video",
+                            imageVector = if (hasEnded && !isAutoPlayEnabled) Icons.Default.Replay else if (isPlayingState) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (hasEnded && !isAutoPlayEnabled) "Replay video" else "Play or Pause video",
                             tint = mainPlayBtnContentColor,
                             modifier = Modifier.size(38.dp)
                         )

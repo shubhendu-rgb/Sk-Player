@@ -385,6 +385,157 @@ class VideoRepository(private val dao: PlaylistItemDao) {
     }
 
     // --- File operations: Edit (Rename, Delete) ---
+    suspend fun getHiddenVideos(context: Context, hiddenIds: Set<String>): List<VideoItem> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<VideoItem>()
+        val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)
+        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val skDir = File(moviesDir, ".sk")
+        
+        val trackedPaths = mutableSetOf<String>()
+        
+        for (id in hiddenIds) {
+            val hiddenPath = prefs.getString("hidden_path_$id", null)
+            val title = prefs.getString("title_override_$id", null) ?: prefs.getString("hidden_title_$id", "Hidden Video")
+            
+            if (hiddenPath != null) {
+                val file = File(hiddenPath)
+                if (file.exists()) {
+                    trackedPaths.add(file.absolutePath)
+                    list.add(
+                        VideoItem(
+                            id = id,
+                            title = title ?: file.name,
+                            uri = hiddenPath,
+                            duration = prefs.getLong("hidden_duration_$id", 0L),
+                            size = file.length(),
+                            mimeType = "video/mp4",
+                            isLocal = true,
+                            thumbnailUri = hiddenPath,
+                            dateAdded = prefs.getLong("hidden_date_$id", 0L)
+                        )
+                    )
+                }
+            }
+        }
+        
+        // Scan the .sk directory for any untracked files (e.g. after reinstall)
+        if (skDir.exists() && skDir.isDirectory) {
+            skDir.listFiles()?.forEach { file ->
+                if (file.isFile && file.name != ".nomedia" && !trackedPaths.contains(file.absolutePath)) {
+                    val newId = "hidden_${System.currentTimeMillis()}_${file.name.hashCode()}"
+                    
+                    var duration = 0L
+                    try {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        retriever.setDataSource(file.absolutePath)
+                        duration = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        retriever.release()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    
+                    prefs.edit()
+                        .putString("hidden_path_$newId", file.absolutePath)
+                        .putString("hidden_title_$newId", file.name)
+                        .putLong("hidden_duration_$newId", duration)
+                        .putLong("hidden_date_$newId", file.lastModified())
+                        .apply()
+                        
+                    list.add(
+                        VideoItem(
+                            id = newId,
+                            title = file.name,
+                            uri = file.absolutePath,
+                            duration = duration,
+                            size = file.length(),
+                            mimeType = "video/mp4",
+                            isLocal = true,
+                            thumbnailUri = file.absolutePath,
+                            dateAdded = file.lastModified()
+                        )
+                    )
+                }
+            }
+        }
+        
+        list
+    }
+
+    suspend fun hideLocalVideo(context: Context, video: VideoItem): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (video.id.startsWith("sim_")) return@withContext true
+            
+            val file = File(video.uri)
+            if (file.exists()) {
+                val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                val skDir = File(moviesDir, ".sk")
+                if (!skDir.exists()) {
+                    skDir.mkdirs()
+                    File(skDir, ".nomedia").createNewFile()
+                }
+                
+                val destFile = File(skDir, file.name)
+                if (file.renameTo(destFile)) {
+                    val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putString("original_path_${video.id}", file.absolutePath)
+                        .putString("hidden_path_${video.id}", destFile.absolutePath)
+                        .putString("hidden_title_${video.id}", video.title)
+                        .putLong("hidden_duration_${video.id}", video.duration)
+                        .putLong("hidden_date_${video.id}", video.dateAdded)
+                        .apply()
+                    
+                    MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
+                    return@withContext true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Log.e("VideoRepository", "Error hiding local file: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun unhideLocalVideo(context: Context, video: VideoItem): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (video.id.startsWith("sim_")) return@withContext true
+            
+            val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)
+            val originalPath = prefs.getString("original_path_${video.id}", null)
+            val hiddenPath = prefs.getString("hidden_path_${video.id}", null)
+            
+            val fileToUnhide = if (hiddenPath != null) File(hiddenPath) else File(video.uri)
+            
+            if (fileToUnhide.exists()) {
+                val destFile = if (originalPath != null) {
+                    File(originalPath)
+                } else {
+                    val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                    File(moviesDir, fileToUnhide.name)
+                }
+                
+                destFile.parentFile?.mkdirs()
+                
+                if (fileToUnhide.renameTo(destFile)) {
+                    prefs.edit()
+                        .remove("original_path_${video.id}")
+                        .remove("hidden_path_${video.id}")
+                        .remove("hidden_title_${video.id}")
+                        .remove("hidden_duration_${video.id}")
+                        .remove("hidden_date_${video.id}")
+                        .apply()
+                    
+                    MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), null, null)
+                    return@withContext true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Log.e("VideoRepository", "Error unhiding local file: ${e.message}")
+            false
+        }
+    }
+
     suspend fun renameLocalFile(context: Context, video: VideoItem, newName: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val prefs = context.getSharedPreferences("playstatus_prefs", Context.MODE_PRIVATE)

@@ -14,8 +14,8 @@ android {
     applicationId = "com.skplayer.org"
     minSdk = 24
     targetSdk = 36
-    versionCode = 7
-    versionName = "3.0"
+    versionCode = 9
+    versionName = "4.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -84,6 +84,8 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
+  implementation("androidx.appcompat:appcompat:1.6.1")
+  implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
   implementation("androidx.documentfile:documentfile:1.0.1")
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)

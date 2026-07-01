@@ -50,6 +50,7 @@ fun LocalVideosTab(
     onTriggerScan: () -> Unit,
     onRenameVideo: (VideoItem, String) -> Unit,
     onDeleteVideo: (VideoItem) -> Unit,
+    onHideVideo: (VideoItem) -> Unit,
     videoGridSize: Int = 2,
     uiCornerRadius: Int = 12,
     isUiBlurEnabled: Boolean = true,
@@ -237,6 +238,13 @@ fun LocalVideosTab(
                     localVideos.filter { seen.add(it.id) }
                 }
 
+                val selectedVideoIds = remember(selectedVideos.size) {
+                    selectedVideos.map { it.id }.toSet()
+                }
+                val progressMap = remember(recentlyPlayedList) {
+                    recentlyPlayedList.associateBy({ it.uri }, { it.progress })
+                }
+
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Fixed(videoGridSize),
@@ -257,8 +265,8 @@ fun LocalVideosTab(
                     }
 
                     items(uniqueVideos, key = { it.id }) { video ->
-                        val isSelected = selectedVideos.any { it.id == video.id }
-                        val currentProgress = recentlyPlayedList.find { it.uri == video.uri }?.progress ?: 0L
+                        val isSelected = selectedVideoIds.contains(video.id)
+                        val currentProgress = progressMap[video.uri] ?: 0L
                         VideoCard(
                             video = video,
                             isSelected = isSelected,
@@ -325,6 +333,26 @@ fun LocalVideosTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             modifier = Modifier.padding(bottom = 20.dp)
                         )
+
+                        // 1. Hide Option
+                        Button(
+                            onClick = {
+                                showSelectionMenu = false
+                                selectedVideos.forEach { video ->
+                                    onHideVideo(video)
+                                }
+                                selectedVideos.clear()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Hide Selection", color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // 2. Delete Option
                         Button(
@@ -693,14 +721,7 @@ fun VideoCard(
     progress: Long = 0L,
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var cachedThumbnailPath by remember(video.id, video.uri) { mutableStateOf<String?>(null) }
-    var thumbnailLoaded by remember(video.id, video.uri) { mutableStateOf(false) }
-    LaunchedEffect(video.id, video.uri) {
-        cachedThumbnailPath = com.example.ThumbnailCacheManager.getOrCreateThumbnail(context, video.id, video.uri)
-        thumbnailLoaded = true
-    }
-    val finalThumb = if (thumbnailLoaded) (cachedThumbnailPath ?: video.thumbnailUri) else null
+    val finalThumb = video.thumbnailUri ?: video.uri
 
     val durationText = remember(video.duration) { formatDuration(video.duration) }
     val formatText = remember(video) { getVideoFormatExtension(video) }
@@ -735,7 +756,7 @@ fun VideoCard(
                     .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
                 // Async image for thumbnail if present, else fallback
-                if (finalThumb != null) {
+                if (finalThumb.isNotEmpty()) {
                     AsyncImage(
                         model = finalThumb,
                         contentDescription = video.title,
@@ -956,14 +977,7 @@ fun RecentlyPlayedCard(
     uiCornerRadius: Int = 12,
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var cachedThumbnailPath by remember(item.id, item.uri) { mutableStateOf<String?>(null) }
-    var thumbnailLoaded by remember(item.id, item.uri) { mutableStateOf(false) }
-    LaunchedEffect(item.id, item.uri) {
-        cachedThumbnailPath = com.example.ThumbnailCacheManager.getOrCreateThumbnail(context, item.id, item.uri)
-        thumbnailLoaded = true
-    }
-    val finalThumb = if (thumbnailLoaded) (cachedThumbnailPath ?: item.thumbnailUri) else null
+    val finalThumb = item.thumbnailUri ?: item.uri
 
     Card(
         modifier = modifier
@@ -986,7 +1000,7 @@ fun RecentlyPlayedCard(
                     .height(85.dp)
                     .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
-                if (finalThumb != null) {
+                if (finalThumb.isNotEmpty()) {
                     AsyncImage(
                         model = finalThumb,
                         contentDescription = item.title,
@@ -1059,7 +1073,9 @@ fun formatDurationPart(durationMs: Long): String {
     val totalSeconds = durationMs / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return String.format("%02d:%02d", minutes, seconds)
+    val minsStr = if (minutes < 10) "0$minutes" else "$minutes"
+    val secsStr = if (seconds < 10) "0$seconds" else "$seconds"
+    return "$minsStr:$secsStr"
 }
 
 // Extract file format extension cleanly
@@ -1093,5 +1109,7 @@ fun formatDuration(ms: Long): String {
     val totalSecs = ms / 1000
     val mins = totalSecs / 60
     val secs = totalSecs % 60
-    return String.format("%02d:%02d", mins, secs)
+    val minsStr = if (mins < 10) "0$mins" else "$mins"
+    val secsStr = if (secs < 10) "0$secs" else "$secs"
+    return "$minsStr:$secsStr"
 }

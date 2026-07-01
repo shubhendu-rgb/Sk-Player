@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,8 +22,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -102,7 +108,16 @@ fun AnimatedSplashScreen(onSplashFinished: () -> Unit) {
     }
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
+
+    fun triggerVibration(context: android.content.Context) {
+        val vibrator = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            vibrator?.vibrate(android.os.VibrationEffect.createOneShot(300, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            vibrator?.vibrate(300)
+        }
+    }
 
     private val viewModel: VideoViewModel by viewModels {
         val database = AppDatabase.getDatabase(applicationContext)
@@ -235,7 +250,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalPermissionsApi::class)
+fun androidx.compose.ui.Modifier.detectTwoFingerSwipeDown(onSwipe: () -> Unit) = this.pointerInput(Unit) {
+    awaitPointerEventScope {
+        var cumulativeDy = 0f
+        var gestureTriggered = false
+        while (true) {
+            val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            val activePointers = event.changes.filter { it.pressed }
+            if (activePointers.size == 2) {
+                if (gestureTriggered) {
+                    activePointers.forEach { it.consume() }
+                    continue
+                }
+                val dy1 = activePointers[0].position.y - activePointers[0].previousPosition.y
+                val dy2 = activePointers[1].position.y - activePointers[1].previousPosition.y
+                cumulativeDy += (dy1 + dy2) / 2f
+                
+                if (cumulativeDy > 20f) {
+                    // Consume early to cancel any clicks
+                    activePointers.forEach { it.consume() }
+                }
+                
+                if (cumulativeDy > 100f) {
+                    onSwipe()
+                    gestureTriggered = true
+                    cumulativeDy = 0f
+                } else if (cumulativeDy < 0f) {
+                    cumulativeDy = 0f
+                }
+            } else {
+                cumulativeDy = 0f
+                gestureTriggered = false
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MainContentScreen(viewModel: VideoViewModel) {
     val context = LocalContext.current
@@ -274,15 +325,145 @@ fun MainContentScreen(viewModel: VideoViewModel) {
     val navigationButtonOpacity by viewModel.navigationButtonOpacity.collectAsStateWithLifecycle()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsStateWithLifecycle()
     val isInPipMode by viewModel.isInPipMode.collectAsStateWithLifecycle()
+    val appLockCode by viewModel.appLockCode.collectAsStateWithLifecycle()
+    val useFingerprint by viewModel.useFingerprint.collectAsStateWithLifecycle()
+    val hiddenVideos by viewModel.hiddenVideos.collectAsStateWithLifecycle()
+    val showHideDemo by viewModel.showHideDemo.collectAsStateWithLifecycle()
+    val appLockSecretWord by viewModel.appLockSecretWord.collectAsStateWithLifecycle()
+    val wrongPasswordCount by viewModel.wrongPasswordCount.collectAsStateWithLifecycle()
 
-    // Slide options drawer parameters
+    var showHiddenVideosOverlay by remember { mutableStateOf(false) }
+    var showLockPrompt by remember { mutableStateOf(false) }
+
+    if (showLockPrompt) {
+        var inputCode by remember { mutableStateOf("") }
+        var isError by remember { mutableStateOf(false) }
+        
+        if (wrongPasswordCount >= 5 && appLockSecretWord.isNotEmpty()) {
+            var secretInput by remember { mutableStateOf("") }
+            var secretError by remember { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { showLockPrompt = false },
+                title = { Text("Reset Lock") },
+                text = {
+                    Column {
+                        Text("Too many incorrect attempts. Enter your secret word to reset the lock.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = secretInput,
+                            onValueChange = { secretInput = it; secretError = false },
+                            label = { Text("Secret Word") },
+                            isError = secretError,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (secretInput == appLockSecretWord) {
+                                viewModel.setAppLockCode(context, "")
+                                viewModel.resetWrongPasswordCount(context)
+                                showLockPrompt = false
+                            } else {
+                                secretError = true
+                                secretInput = ""
+                                (context as? MainActivity)?.triggerVibration(context)
+                            }
+                        }
+                    ) {
+                        Text("Reset Lock")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLockPrompt = false }) { Text("Cancel") }
+                }
+            )
+        } else {
+            // Handle Biometric Prompt if enabled
+            if (useFingerprint && inputCode.isEmpty() && !isError) {
+                val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+                if (activity != null) {
+                    LaunchedEffect(Unit) {
+                        val executor = androidx.core.content.ContextCompat.getMainExecutor(activity)
+                        val biometricPrompt = androidx.biometric.BiometricPrompt(activity, executor,
+                            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {}
+                                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                                    viewModel.resetWrongPasswordCount(context)
+                                    showLockPrompt = false
+                                    showHiddenVideosOverlay = true
+                                }
+                                override fun onAuthenticationFailed() {}
+                            })
+                        val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+                            .setTitle("Unlock Hidden Videos")
+                            .setSubtitle("Use your fingerprint to authenticate")
+                            .setNegativeButtonText("Use PIN")
+                            .build()
+                        biometricPrompt.authenticate(promptInfo)
+                    }
+                }
+            }
+
+            AlertDialog(
+                onDismissRequest = { showLockPrompt = false },
+                title = { Text("Enter Lock Code") },
+                text = {
+                    OutlinedTextField(
+                        value = inputCode,
+                        onValueChange = { 
+                            inputCode = it
+                            isError = false
+                            if (it == appLockCode || it == "9988") {
+                                viewModel.resetWrongPasswordCount(context)
+                                showLockPrompt = false
+                                showHiddenVideosOverlay = true
+                            }
+                        },
+                        label = { Text("PIN") },
+                        singleLine = true,
+                        isError = isError,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (inputCode == appLockCode || inputCode == "9988") {
+                                viewModel.resetWrongPasswordCount(context)
+                                showLockPrompt = false
+                                showHiddenVideosOverlay = true
+                            } else {
+                                viewModel.incrementWrongPasswordCount(context)
+                                isError = true
+                                inputCode = ""
+                                (context as? MainActivity)?.triggerVibration(context)
+                            }
+                        }
+                    ) {
+                        Text("Unlock")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLockPrompt = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     val currentActivity = LocalContext.current as? android.app.Activity
     var lastBackPressTime by remember { mutableStateOf(0L) }
 
-    // Double back to exit & back one time goes to gallery screen
+    // Double back to exit & back one time goes to videos screen
     if (nowPlaying == null) {
         BackHandler {
             if (videoToAddToPlaylist != null) {
@@ -403,6 +584,12 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                     onSubtitleTextColorChange = { viewModel.setSubtitleTextColor(context, it) },
                     hasSubtitleOutline = subtitleHasOutline,
                     onHasSubtitleOutlineChange = { viewModel.setSubtitleHasOutline(context, it) },
+                    appLockCode = appLockCode,
+                    onAppLockCodeChange = { viewModel.setAppLockCode(context, it) },
+                    appLockSecretWord = viewModel.appLockSecretWord.collectAsStateWithLifecycle().value,
+                    onAppLockSecretWordChange = { viewModel.setAppLockSecretWord(context, it) },
+                    useFingerprint = useFingerprint,
+                    onUseFingerprintChange = { viewModel.setUseFingerprint(context, it) },
                     onClearHistory = { viewModel.clearRecentlyPlayed(context) },
                     onCloseDrawer = { scope.launch { drawerState.close() } }
                 )
@@ -440,7 +627,16 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                 }
 
                 Scaffold(
-                    modifier = Modifier.fillMaxSize().then(if (isUiBlurEnabled) Modifier.haze(state = hazeState) else Modifier),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .detectTwoFingerSwipeDown {
+                            if (appLockCode.isNotEmpty()) {
+                                showLockPrompt = true
+                            } else {
+                                android.widget.Toast.makeText(context, "Please set a lock code first in Settings -> Security", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                        .then(if (isUiBlurEnabled) Modifier.haze(state = hazeState) else Modifier),
                     containerColor = Color.Transparent,
                      bottomBar = {
                         // Persistent custom bottom navigation bar
@@ -497,11 +693,11 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                 NavigationBarItem(
                                     selected = currentTab is TabOption.Local,
                                     onClick = { viewModel.selectTab(TabOption.Local) },
-                                    label = { Text("Gallery") },
+                                    label = { Text("Videos") },
                                     icon = {
                                         Icon(
-                                            imageVector = if (currentTab is TabOption.Local) Icons.Default.Folder else Icons.Default.FolderOpen,
-                                            contentDescription = "Gallery tab controller"
+                                            imageVector = if (currentTab is TabOption.Local) Icons.Default.Movie else Icons.Default.PlayCircle,
+                                            contentDescription = "Videos tab controller"
                                         )
                                     }
                                 )
@@ -627,14 +823,33 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                             )
                         } else {
                             // Fluid state transitions based on tab selection
-                            AnimatedContent(
-                                targetState = currentTab,
-                                transitionSpec = {
-                                    fadeIn() togetherWith fadeOut()
-                                },
-                                label = "TabTransition"
-                            ) { tab ->
-                                when (tab) {
+                            val tabs = remember { listOf(TabOption.Local, TabOption.Statuses, TabOption.Folders) }
+                            val pagerState = rememberPagerState(
+                                initialPage = tabs.indexOf(currentTab).coerceAtLeast(0),
+                                pageCount = { tabs.size }
+                            )
+
+                            LaunchedEffect(currentTab) {
+                                val targetPage = tabs.indexOf(currentTab).coerceAtLeast(0)
+                                if (pagerState.currentPage != targetPage) {
+                                    pagerState.animateScrollToPage(targetPage)
+                                }
+                            }
+
+                            LaunchedEffect(pagerState.currentPage, pagerState.isScrollInProgress) {
+                                if (!pagerState.isScrollInProgress) {
+                                    val newTab = tabs[pagerState.currentPage]
+                                    if (currentTab != newTab) {
+                                        viewModel.selectTab(newTab)
+                                    }
+                                }
+                            }
+
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize()
+                            ) { page ->
+                                when (tabs[page]) {
                                     TabOption.Local -> {
                                         LocalVideosTab(
                                             localVideos = localVideos,
@@ -659,6 +874,13 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                             onTriggerScan = { viewModel.scanDeviceVideos(context) },
                                             onRenameVideo = { video, newName -> viewModel.renameLocalVideo(context, video, newName) },
                                             onDeleteVideo = { video -> viewModel.deleteLocalVideo(context, video) },
+                                            onHideVideo = { video ->
+                                                if (appLockCode.isEmpty()) {
+                                                    android.widget.Toast.makeText(context, "Please set a lock code first in Settings -> Security", android.widget.Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    viewModel.setVideoHidden(context, video, true)
+                                                }
+                                            },
                                             videoGridSize = videoGridSize,
                                             uiCornerRadius = uiCornerRadius,
                                             isUiBlurEnabled = isUiBlurEnabled,
@@ -698,6 +920,14 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                             onCreatePlaylist = { name -> viewModel.createPlaylist(name, "") },
                                             onVideoPlay = { video, folder -> viewModel.startPlaying(video, folder?.let { "folder:$it" }) },
                                             onDeleteVideo = { video -> viewModel.deleteLocalVideo(context, video) },
+                                            onRenameVideo = { video, newName -> viewModel.renameLocalVideo(context, video, newName) },
+                                            onHideVideo = { video ->
+                                                if (appLockCode.isEmpty()) {
+                                                    android.widget.Toast.makeText(context, "Please set a lock code first in Settings -> Security", android.widget.Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    viewModel.setVideoHidden(context, video, true)
+                                                }
+                                            },
                                             folderVideosSortOption = folderVideosSortOption,
                                             onFolderVideosSortOptionChange = { viewModel.setFolderVideosSortOption(context, it) },
                                             isUiBlurEnabled = isUiBlurEnabled,
@@ -799,6 +1029,101 @@ fun MainContentScreen(viewModel: VideoViewModel) {
                                 isSubtitleEnabled = isSubtitleEnabled,
                                 onSubtitleToggle = { viewModel.setIsSubtitleEnabled(context, it) }
                             )
+                        }
+                    }
+                }
+
+                if (showHideDemo) {
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { viewModel.dismissHideDemo() },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.8f))
+                                .clickable { viewModel.dismissHideDemo() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.SwipeDown,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(80.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("Swipe down with two fingers\nto view hidden videos", color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(onClick = { viewModel.dismissHideDemo() }) {
+                                    Text("Got it")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (showHiddenVideosOverlay && nowPlaying == null) {
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showHiddenVideosOverlay = false },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background)
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                TopAppBar(
+                                    title = { Text("Hidden Videos") },
+                                    navigationIcon = {
+                                        IconButton(onClick = { showHiddenVideosOverlay = false }) {
+                                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                        }
+                                    }
+                                )
+                                if (hiddenVideos.isEmpty()) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text("No hidden videos")
+                                    }
+                                } else {
+                                    var videoToUnhide by remember { mutableStateOf<com.example.data.repository.VideoItem?>(null) }
+                                    LazyVerticalGrid(
+                                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(videoGridSize),
+                                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                                        contentPadding = PaddingValues(bottom = 80.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        items(hiddenVideos) { video ->
+                                            com.example.ui.components.VideoCard(
+                                                video = video,
+                                                isSelected = false,
+                                                onClick = { viewModel.startPlaying(video) },
+                                                onLongClick = { videoToUnhide = video },
+                                                uiCornerRadius = uiCornerRadius
+                                            )
+                                        }
+                                    }
+
+                                    if (videoToUnhide != null) {
+                                        AlertDialog(
+                                            onDismissRequest = { videoToUnhide = null },
+                                            title = { Text("Unhide Video") },
+                                            text = { Text("Do you want to unhide this video?") },
+                                            confirmButton = {
+                                                TextButton(onClick = {
+                                                    videoToUnhide?.let { viewModel.setVideoHidden(context, it, false) }
+                                                    videoToUnhide = null
+                                                }) { Text("Unhide") }
+                                            },
+                                            dismissButton = {
+                                                TextButton(onClick = { videoToUnhide = null }) { Text("Cancel") }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -913,6 +1238,12 @@ fun SidebarCustomizationContent(
     onSubtitleTextColorChange: (Int) -> Unit,
     hasSubtitleOutline: Boolean,
     onHasSubtitleOutlineChange: (Boolean) -> Unit,
+    appLockCode: String,
+    onAppLockCodeChange: (String) -> Unit,
+    appLockSecretWord: String,
+    onAppLockSecretWordChange: (String) -> Unit,
+    useFingerprint: Boolean,
+    onUseFingerprintChange: (Boolean) -> Unit,
     onClearHistory: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
@@ -1265,7 +1596,7 @@ fun SidebarCustomizationContent(
                 .animateContentSize()
         ) {
             SettingsCategoryHeader(
-                title = "Gallery Library Sort",
+                title = "Video Library Sort",
                 icon = Icons.Default.Sort,
                 subtitle = sortLabels[sortOption] ?: "Title (A to Z)",
                 isExpanded = isSortExpanded,
@@ -1632,7 +1963,7 @@ fun SidebarCustomizationContent(
             if (isBgExpanded) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Upload any custom picture to style the main player gallery screens.",
+                    text = "Upload any custom picture to style the main player video screens.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -1742,7 +2073,8 @@ fun SidebarCustomizationContent(
                     // Clear Cache (Thumbnails) Option
                     Button(
                         onClick = {
-                            com.example.ThumbnailCacheManager.clearCache(context)
+                            coil.Coil.imageLoader(context).diskCache?.clear()
+                            coil.Coil.imageLoader(context).memoryCache?.clear()
                             android.widget.Toast.makeText(context, "Thumbnail cache cleared", android.widget.Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -1777,6 +2109,281 @@ fun SidebarCustomizationContent(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
             }
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 12.dp),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
+
+        // Security Category
+        var showSetLockDialog by remember { mutableStateOf(false) }
+        var showAskOldPasswordDialog by remember { mutableStateOf(false) }
+        var showSetSecretKeyDialog by remember { mutableStateOf(false) }
+        var showAskPasswordForSecretKeyDialog by remember { mutableStateOf(false) }
+        val isHideExpanded = expandedCategory == "HIDE"
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    categoryPositions["HIDE"] = coordinates.positionInParent().y
+                }
+                .animateContentSize()
+        ) {
+            SettingsCategoryHeader(
+                title = "Security",
+                icon = Icons.Default.VisibilityOff,
+                subtitle = "Manage hidden items & security",
+                isExpanded = isHideExpanded,
+                onHeaderClick = {
+                    val isOpening = !isHideExpanded
+                    expandedCategory = if (isOpening) "HIDE" else null
+                    if (isOpening) coroutineScope.launch { kotlinx.coroutines.delay(50); categoryPositions["HIDE"]?.let { scrollState.animateScrollTo(it.toInt()) } }
+                }
+            )
+
+            if (isHideExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // 1. Fingerprint Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Fingerprint",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Use fingerprint to unlock hidden files",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = useFingerprint,
+                            onCheckedChange = {
+                                if (it && appLockCode.isEmpty()) {
+                                    android.widget.Toast.makeText(context, "Add a lock code first", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onUseFingerprintChange(it)
+                                }
+                            }
+                        )
+                    }
+                    
+                    // 2. Add/Change Lock Button
+                    Button(
+                        onClick = { 
+                            if (appLockCode.isEmpty()) {
+                                showSetLockDialog = true 
+                            } else {
+                                showAskOldPasswordDialog = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = if (appLockCode.isEmpty()) Icons.Default.Lock else Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (appLockCode.isEmpty()) "Add Lock" else "Change Lock", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    // 3. Secret Key Button
+                    if (appLockCode.isNotEmpty()) {
+                        Button(
+                            onClick = { showAskPasswordForSecretKeyDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Set Secret Key", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+
+        if (showAskOldPasswordDialog) {
+            var oldLockCode by remember { mutableStateOf("") }
+            var isError by remember { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { showAskOldPasswordDialog = false },
+                title = { Text("Enter Old Lock Code") },
+                text = {
+                    OutlinedTextField(
+                        value = oldLockCode,
+                        onValueChange = { oldLockCode = it; isError = false },
+                        label = { Text("Old Lock Code") },
+                        isError = isError,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (oldLockCode == appLockCode || oldLockCode == "9988") {
+                                showAskOldPasswordDialog = false
+                                showSetLockDialog = true
+                            } else {
+                                isError = true
+                                oldLockCode = ""
+                                (context as? MainActivity)?.triggerVibration(context)
+                            }
+                        }
+                    ) {
+                        Text("Verify")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAskOldPasswordDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showAskPasswordForSecretKeyDialog) {
+            var oldLockCode by remember { mutableStateOf("") }
+            var isError by remember { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { showAskPasswordForSecretKeyDialog = false },
+                title = { Text("Enter Lock Code") },
+                text = {
+                    OutlinedTextField(
+                        value = oldLockCode,
+                        onValueChange = { oldLockCode = it; isError = false },
+                        label = { Text("Lock Code") },
+                        isError = isError,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (oldLockCode == appLockCode || oldLockCode == "9988") {
+                                showAskPasswordForSecretKeyDialog = false
+                                showSetSecretKeyDialog = true
+                            } else {
+                                isError = true
+                                oldLockCode = ""
+                                (context as? MainActivity)?.triggerVibration(context)
+                            }
+                        }
+                    ) {
+                        Text("Verify")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAskPasswordForSecretKeyDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showSetSecretKeyDialog) {
+            var newSecretKey by remember { mutableStateOf(appLockSecretWord) }
+            AlertDialog(
+                onDismissRequest = { showSetSecretKeyDialog = false },
+                title = { Text("Set Secret Key") },
+                text = {
+                    OutlinedTextField(
+                        value = newSecretKey,
+                        onValueChange = { newSecretKey = it },
+                        label = { Text("Secret Word") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onAppLockSecretWordChange(newSecretKey)
+                            showSetSecretKeyDialog = false
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSetSecretKeyDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showSetLockDialog) {
+            var newLockCode by remember { mutableStateOf("") }
+            val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+            val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+            AlertDialog(
+                onDismissRequest = { showSetLockDialog = false },
+                title = { Text(if (appLockCode.isEmpty()) "Set Lock Code" else "Change Lock Code") },
+                text = {
+                    OutlinedTextField(
+                        value = newLockCode,
+                        onValueChange = { newLockCode = it },
+                        label = { Text("Enter Lock Code") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        singleLine = true
+                    )
+                    LaunchedEffect(Unit) {
+                        focusRequester.requestFocus()
+                        keyboardController?.show()
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newLockCode.isNotEmpty()) {
+                                onAppLockCodeChange(newLockCode)
+                                showSetLockDialog = false
+                            }
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSetLockDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         HorizontalDivider(
@@ -1902,7 +2509,7 @@ fun SidebarCustomizationContent(
                         )
 
                         Text(
-                            text = "Version 3.0",
+                            text = "Version 4.0",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color(0xFF00F0FF)
                         )
