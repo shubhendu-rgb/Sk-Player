@@ -10,6 +10,7 @@ SK Player is a feature-rich video player designed to give you complete control o
  * **WhatsApp Status Saver:** View, download, and share your friends' WhatsApp statuses directly from the app.
  * **Private Vault (Hide Videos):** Keep your personal videos secure and hidden behind a password or biometric lock.
  * **Advanced Video Filters:** Enhance your viewing experience with real-time brightness, contrast, and color tune filters.
+ * **Live Channel Streaming:** You Can Watch Live Channels {use channel link not playlist link}
 ## 🛠️ Tech Stack
  * **Language:** Kotlin
  * **Core Player Engine:** ExoPlayer
