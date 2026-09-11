@@ -6,6 +6,10 @@ SK Player is a feature-rich video player designed to give you complete control o
  * **Audio Track Switching:** Easily toggle between multiple audio tracks/languages in a single video.
  * **Gesture Controls:** Swipe for quick brightness, volume, and seeking adjustments.
  * **Subtitle Support:** Load external subtitles or choose from embedded tracks.
+ * **Audio Effects:** for better audio quality
+ *  **Video Effects:** for better visual experience
+ *   **Audio Extractor:** for extract videos audio in .mp3 format
+ *    **Playlist** you can make playlists
 ### 🌟 Extra Features
  * **WhatsApp Status Saver:** View, download, and share your friends' WhatsApp statuses directly from the app.
  * **Private Vault (Hide Videos):** Keep your personal videos secure and hidden behind a password or biometric lock.
@@ -17,9 +21,7 @@ SK Player is a feature-rich video player designed to give you complete control o
  * **Architecture:** Clean Architecture
 ## 📸 Screenshots
 | :--- | :--- | :--- | :--- |
-| *[<img width="720" height="1600" alt="Screenshot_2026-06-20-23-00-33-20_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/00203f17-3ca4-4758-8b08-005f6323905e" />]* | *[<img width="720" height="1600" alt="Screenshot_2026-06-20-23-00-59-12_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/0ba55cfc-8d79-4f2c-af74-8881a7d15ae1" />
-]* | *[<img width="720" height="1600" alt="Screenshot_2026-06-20-23-01-06-65_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/8343f231-ee84-4951-b9f9-b157c2ae3bd0" />]* | *[<img width="720" height="1600" alt="Screenshot_2026-06-20-23-01-17-60_ecce5f57594e081b402a51b9e20a56f3" src="https://github.com/user-attachments/assets/a25c5e84-21a5-468f-bd4e-07c4ca214ea1" />]* |
-
+| I DON'T KNOW HOW TO ADD SCREENSHOTS
 ```
 ## 🤝 Contributing
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create.
