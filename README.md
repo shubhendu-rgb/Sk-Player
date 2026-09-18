@@ -22,7 +22,25 @@ SK Player is a feature-rich video player designed to give you complete control o
 ## 📸 Screenshots
 | :--- | :--- | :--- | :--- |
 | I DON'T KNOW HOW TO ADD SCREENSHOTS
-```
+
+
+**Notice Regarding App Installation**
+
+We sincerely apologize for the inconvenience you may be experiencing while trying to install our application. Currently, Google Play Protect is flagging the app and blocking the installation process. This frequently happens with newly released applications or direct downloads that are not yet fully indexed by Google's security systems, even when the software is completely safe.
+
+Please be assured that our app is secure and free of any malicious software. To complete your installation, you can temporarily bypass this block by adjusting your Play Store settings.
+
+**How to Temporarily Disable Google Play Protect**
+
+*Open the Google Play Store app on your Android device.
+*Tap your profile icon located in the top right corner of the screen.
+*Select Play Protect from the menu options.
+*Tap the Settings gear icon in the top right corner of the Play Protect screen.
+*Toggle off the switch next to Scan apps with Play Protect.
+*Tap Turn off to confirm your decision when the system prompt appears.
+*Proceed to install our application.
+*Once the installation is complete, return to these settings and toggle Play Protect back on to ensure your device remains protected from external threats.
+
 ## 🤝 Contributing
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create.
 No one. (`^`)
